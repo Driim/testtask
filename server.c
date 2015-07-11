@@ -14,24 +14,30 @@
 #include <unistd.h>
 #include <event2/buffer.h>
 
-static int file_counter;
+/*
+ *
+ * Событийно-ориентированный сервер реализованный при помощи библиотеки libevent2.
+ *
+ *
+ */
+
+/* Просто счетчик для генерации имени файла */
+volatile static int file_counter;
 
 static void error_callback(struct bufferevent *bev, short error, void *ctx)
 {
     int *fd = ctx;
 
-    if(error & BEV_EVENT_EOF) {
-        fprintf(stderr, "EOF\n");
-        close(*fd);
-        free(fd);
-        bufferevent_free(bev);
-    } else if(error & BEV_EVENT_ERROR) {
-        /*TODO: remove file from fs*/
-        fprintf(stderr, "Error\n");
-        close(*fd);
-        free(fd);
-        bufferevent_free(bev);
-    }
+    /*
+     * Возможно 3 вариант, либо был EOF от сокета, либо ошибка,
+     * либо таймаут, по хорошему во 2 и 3 случае стоит удалить
+     * созданный файл, но для простоты этого не делал, так что
+     * обработчик для всех 3 случаев одинаковый.
+     */
+    close(*fd);
+    free(fd);
+    bufferevent_free(bev);
+
 }
 
 static void socket_read_cb(struct bufferevent *bev, void *ctx)
@@ -51,13 +57,12 @@ static void accept_connection_cb(struct evconnlistener *listener,
     struct timeval timeout;
     int ret;
     int *file_fd;
+
     /* создаем файл для записи */
     char path[100];
     sprintf(path, "%s/%d.txt", (char *)arg, file_counter++);
     file_fd =malloc(sizeof(int));
     *file_fd = open(path, O_WRONLY | O_CREAT);
-
-    fprintf(stderr, "Accept new connection\n");
 
     /* Создаем сокет для подключения */
     ev_buf = bufferevent_socket_new(evconnlistener_get_base(listener), fd, BEV_OPT_CLOSE_ON_FREE);
@@ -66,17 +71,18 @@ static void accept_connection_cb(struct evconnlistener *listener,
         free(file_fd);
         return;
     }
-    /* Устанавливаем callback-функции */
+
     bufferevent_setcb(ev_buf,
                       socket_read_cb,     /* callback чтения*/
                       NULL,               /* callback записи*/
                       error_callback,     /* callback ошибки*/
-                      file_fd);                /* в callback-функции можно передать данные */
+                      file_fd);           /* передаем дескриптор файла в callback-функции */
 
     /* устанавливаем таймаут */
     timeout.tv_sec = 5;
     timeout.tv_usec = 0;
     bufferevent_set_timeouts(ev_buf, &timeout, NULL);
+
     /* Активируем событие */
     ret = bufferevent_enable(ev_buf, EV_READ);
     if (ret < 0) {
@@ -134,7 +140,7 @@ int main(int argc, const char* argv[])
 
     ev_listener = evconnlistener_new_bind(ev_base,
                                           accept_connection_cb, /* будет вызвана при попытки подключения*/
-                                          argv[2],                 /* можно передать данные в callback-функцию */
+                                          (void *)argv[2],                 /* можно передать данные в callback-функцию */
                                           (LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE),
                                           -1,
                                           (struct sockaddr *) &server,

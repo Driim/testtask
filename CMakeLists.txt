@@ -4,7 +4,7 @@ project(TestTask)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 
-find_package(LibUV REQUIRED)
+find_package(LibEvent REQUIRED)
 
 if (LibEvent_FOUND)
   include_directories(SYSTEM ${LIBEVENT_INCLUDE_DIR})
